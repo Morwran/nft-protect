@@ -1,7 +1,8 @@
-#ifndef __LSM_NETLINK_H__
-#define __LSM_NETLINK_H__
+#ifndef __NETLINK_H__
+#define __NETLINK_H__
 
 #include "input_params.h"
+#include "send_event.h"
 
 #define NETLINK_NETFILTER 12 /* netfilter subsystem */
 
@@ -33,7 +34,7 @@ struct nfgenmsg
     __be16 res_id;     /* resource id */
 };
 
-static __always_inline bool attr_has_protected_tbl(void *attr_buf, u32 len)
+static __always_inline bool nl_attr_has_protected_tbl(void *attr_buf, u32 len)
 {
     for (int n = 0; n < MAX_ATTRS && len >= sizeof(struct nlattr); n++)
     {
@@ -77,4 +78,68 @@ static __always_inline bool attr_has_protected_tbl(void *attr_buf, u32 len)
     return false;
 }
 
-#endif /* __LSM_NETLINK_H__ */
+static __always_inline int nl_handle_msg(struct sk_buff *skb)
+{
+    void *data = (void *)BPF_CORE_READ(skb, data);
+    void *data_end = data + BPF_CORE_READ(skb, len);
+
+    for (int i = 0; i < MAX_MSGS; i++)
+    {
+        struct nlmsghdr *nlh = data;
+        if ((void *)nlh + sizeof(*nlh) > data_end)
+            break;
+
+        u32 nlh_len = BPF_CORE_READ(nlh, nlmsg_len);
+        if (nlh_len == 0 || (void *)nlh + nlh_len > data_end)
+            break;
+
+        u16 ntype = BPF_CORE_READ(nlh, nlmsg_type);
+        u8 subsys = NFNL_SUBSYS_ID(ntype);
+        u8 mtype = NFNL_MSG_TYPE(ntype);
+
+        if (subsys != NFNL_SUBSYS_NFTABLES)
+        {
+            data += NLMSG_ALIGN(nlh_len);
+            continue;
+        }
+        switch (mtype)
+        {
+        case NFT_MSG_NEWTABLE:
+        case NFT_MSG_DELTABLE:
+        case NFT_MSG_NEWRULE:
+        case NFT_MSG_DELRULE:
+        case NFT_MSG_NEWCHAIN:
+        case NFT_MSG_DELCHAIN:
+        case NFT_MSG_NEWSET:
+        case NFT_MSG_DELSET:
+        {
+            void *attr_buf;
+            u32 attr_len;
+
+            attr_buf = (void *)nlh + sizeof(struct nlmsghdr) + sizeof(struct nfgenmsg);
+            attr_len = nlh_len - sizeof(struct nlmsghdr) - sizeof(struct nfgenmsg);
+            u32 curr_pid = bpf_get_current_pid_tgid() >> 32;
+            if (nl_attr_has_protected_tbl(attr_buf, attr_len) &&
+                curr_pid != get_allowed_pid())
+            {
+                u8 comm[TASK_COMM_LEN];
+                if (bpf_get_current_comm(&comm, TASK_COMM_LEN) == 0)
+                {
+                    send_event(curr_pid, comm);
+                }
+                return -EPERM;
+            }
+
+            break;
+        }
+        default:
+            break;
+        }
+
+        data += NLMSG_ALIGN(nlh_len);
+    }
+
+    return 0;
+}
+
+#endif

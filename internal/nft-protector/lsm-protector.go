@@ -1,4 +1,4 @@
-package lsm
+package nft_protector
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	kernel_info "github.com/Morwran/nft-protect/internal/kernel-info"
 	"github.com/Morwran/nft-protect/internal/model"
-	nft_protector "github.com/Morwran/nft-protect/internal/nft-protector"
 
 	"github.com/H-BF/corlib/logger"
 	"github.com/H-BF/corlib/pkg/queue"
@@ -25,10 +24,9 @@ const MaxTblNameLen = 64
 var (
 	requiredKernelModules   = []string{"nf_tables"}
 	minKernelVersionSupport = kernel_info.KernelVersion{Major: 5, Minor: 11, Patch: 0}
-	kernelModulesFile       = "/proc/modules"
 )
 
-var _ nft_protector.Protector = (*lsmBpfProtector)(nil)
+var _ Protector = (*lsmBpfProtector)(nil)
 
 type (
 	lsmBpfProtector struct {
@@ -94,7 +92,7 @@ func (p *lsmBpfProtector) Run(ctx context.Context) error {
 		log.Info("stop")
 		close(p.stopped)
 	}()
-	lsmLink, err := link.AttachLSM(link.LSMOptions{Program: p.objs.BlockTbl})
+	lsmLink, err := link.AttachLSM(link.LSMOptions{Program: p.objs.LsmNetlinkSend})
 	if err != nil {
 		return errors.WithMessage(err, "failed to attach LSM program")
 	}

@@ -1,9 +1,7 @@
 #ifndef __SEND_EVENT_H__
 #define __SEND_EVENT_H__
 
-#ifndef TASK_COMM_LEN
 #define TASK_COMM_LEN 32
-#endif
 
 struct event
 {

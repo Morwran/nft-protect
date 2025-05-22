@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	nft_protector "github.com/Morwran/nft-protect/internal/nft-protector"
-	"github.com/Morwran/nft-protect/internal/nft-protector/lsm"
 
 	"github.com/pkg/errors"
 )
@@ -25,5 +24,5 @@ func SetupProtector() (nft_protector.Protector, error) {
 }
 
 func setupLsmProtector(pid uint32, protectedTblName string) (nft_protector.Protector, error) {
-	return lsm.NewLsmEbpfProtector(pid, protectedTblName)
+	return nft_protector.NewLsmEbpfProtector(pid, protectedTblName)
 }

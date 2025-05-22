@@ -93,23 +93,23 @@ endif
 BPFDIR:=$(CURDIR)/internal/nft-protector
 
 
-.PHONY: .lsm-ebpf
-.lsm-ebpf: | .install-bpf2go ##build ebpf program. Usage: make .ebpf [arch=<amd64|arm64>]
+.PHONY: .ebpf
+.ebpf: | .install-bpf2go ##build ebpf program. Usage: make .ebpf [arch=<amd64|arm64>]
 ifeq ($(filter amd64 arm64,$(arch)),)
 	$(error arch=$(arch) but must be in [amd64|arm64])
 endif
 ifneq ('$(os)','linux')
 	@$(MAKE) $@ os=linux
 else
-	@echo build lsm-ebpf program for OS/ARCH='$(os)'/'$(arch)' ... && \
-	$(BPF2GO) -output-dir $(BPFDIR)/lsm/ -tags $(os) -type event -go-package=lsm -target $(arch) bpf $(BPFDIR)/lsm/ebpf/lsm_netlink.c -- -I$(BPFDIR)/lsm/ebpf/ && \
+	@echo build ebpf program for OS/ARCH='$(os)'/'$(arch)' ... && \
+	$(BPF2GO) -output-dir $(BPFDIR) -tags $(os) -type event -go-package=nft_protector -target $(arch) bpf $(BPFDIR)/ebpf/netlink.c -- -I$(BPFDIR)/ebpf/ && \
 	echo -=OK=-
 endif
 
 
 .PHONY: nft-protector
 
-nft-protector: | .lsm-ebpf ##build nft-protector. Usage: make nft-protector [platform=linux/<amd64|arm64>]
+nft-protector: | .ebpf ##build nft-protector. Usage: make nft-protector [platform=linux/<amd64|arm64>]
 nft-protector: OUT=$(CURDIR)/bin/nft-protector
 nft-protector:
 ifeq ($(filter amd64 arm64,$(arch)),)
