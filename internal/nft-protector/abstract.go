@@ -6,6 +6,8 @@ import (
 	"github.com/Morwran/nft-protect/internal/model"
 )
 
+const MaxTblNameLen = 64
+
 type (
 	Protector interface {
 		Run(context.Context) error

@@ -23,7 +23,9 @@ int BPF_PROG(lsm_netlink_send, struct sock *sk, struct sk_buff *skb)
 }
 
 SEC("kprobe/nfnetlink_rcv")
-int BPF_PROG(kprobe_nfnetlink_rcv, struct sk_buff *skb)
+int kprobe_nfnetlink_rcv(struct pt_regs *ctx)
 {
-    return nl_handle_msg(skb);
+    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM1(ctx);
+    nl_handle_msg(skb);
+    return 0;
 }

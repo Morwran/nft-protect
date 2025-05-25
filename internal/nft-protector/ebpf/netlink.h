@@ -87,11 +87,15 @@ static __always_inline int nl_handle_msg(struct sk_buff *skb)
     {
         struct nlmsghdr *nlh = data;
         if ((void *)nlh + sizeof(*nlh) > data_end)
+        {
             break;
+        }
 
         u32 nlh_len = BPF_CORE_READ(nlh, nlmsg_len);
         if (nlh_len == 0 || (void *)nlh + nlh_len > data_end)
+        {
             break;
+        }
 
         u16 ntype = BPF_CORE_READ(nlh, nlmsg_type);
         u8 subsys = NFNL_SUBSYS_ID(ntype);
@@ -102,6 +106,7 @@ static __always_inline int nl_handle_msg(struct sk_buff *skb)
             data += NLMSG_ALIGN(nlh_len);
             continue;
         }
+
         switch (mtype)
         {
         case NFT_MSG_NEWTABLE:

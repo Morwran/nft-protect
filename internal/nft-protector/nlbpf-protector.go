@@ -19,10 +19,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-var _ Protector = (*lsmBpfProtector)(nil)
+var _ Protector = (*nlBpfProtector)(nil)
 
 type (
-	lsmBpfProtector struct {
+	nlBpfProtector struct {
 		objs      bpfObjects
 		que       queue.FIFO[model.ProcessInfo]
 		onceRun   sync.Once
@@ -32,13 +32,10 @@ type (
 	}
 )
 
-func NewLsmEbpfProtector(pid uint32, protectedTblName string) (*lsmBpfProtector, error) {
-	err := ensureKernelSupport(kernelinfo.KernelVersion{Major: 5, Minor: 11, Patch: 0})
+func NewNlBpfProtector(pid uint32, protectedTblName string) (*nlBpfProtector, error) {
+	err := ensureKernelSupport(kernelinfo.KernelVersion{Major: 5, Minor: 8, Patch: 0})
 	if err != nil {
 		return nil, err
-	}
-	if err = ensureLsmSupport(); err != nil {
-		return nil, errors.WithMessage(err, "failed to check LSM kernel support")
 	}
 	if err = rlimit.RemoveMemlock(); err != nil {
 		return nil, errors.WithMessage(err, "failed to lock memory for process")
@@ -60,14 +57,14 @@ func NewLsmEbpfProtector(pid uint32, protectedTblName string) (*lsmBpfProtector,
 		return nil, errors.WithMessage(err, "failed to setup protected table name")
 	}
 
-	return &lsmBpfProtector{
+	return &nlBpfProtector{
 		objs: objs,
 		que:  queue.NewFIFO[model.ProcessInfo](),
 		stop: make(chan struct{}),
 	}, nil
 }
 
-func (p *lsmBpfProtector) Run(ctx context.Context) error {
+func (p *nlBpfProtector) Run(ctx context.Context) error {
 	var doRun bool
 
 	p.onceRun.Do(func() {
@@ -78,16 +75,16 @@ func (p *lsmBpfProtector) Run(ctx context.Context) error {
 	}
 	p.stopped = make(chan struct{})
 
-	log := logger.FromContext(ctx).Named("lsm-protector")
+	log := logger.FromContext(ctx).Named("nlbpf-protector")
 	defer func() {
 		log.Info("stop")
 		close(p.stopped)
 	}()
-	lsmLink, err := link.AttachLSM(link.LSMOptions{Program: p.objs.LsmNetlinkSend})
+	kp, err := link.Kprobe("nfnetlink_rcv", p.objs.KprobeNfnetlinkRcv, nil)
 	if err != nil {
-		return errors.WithMessage(err, "failed to attach LSM program")
+		return errors.WithMessage(err, "opening kprobe")
 	}
-	defer func() { _ = lsmLink.Close() }()
+	defer func() { _ = kp.Close() }()
 	log.Info("start")
 	return p.rcvEvent(logger.ToContext(ctx, log), func(event Event) error {
 		p.que.Put(event.ToModel())
@@ -96,12 +93,12 @@ func (p *lsmBpfProtector) Run(ctx context.Context) error {
 }
 
 // EvtReader
-func (p *lsmBpfProtector) EvtReader() <-chan model.ProcessInfo {
+func (p *nlBpfProtector) EvtReader() <-chan model.ProcessInfo {
 	return p.que.Reader()
 }
 
 // Close
-func (p *lsmBpfProtector) Close() error {
+func (p *nlBpfProtector) Close() error {
 	p.onceClose.Do(func() {
 		close(p.stop)
 		p.onceRun.Do(func() {})
@@ -113,7 +110,7 @@ func (p *lsmBpfProtector) Close() error {
 	return nil
 }
 
-func (p *lsmBpfProtector) rcvEvent(ctx context.Context, callback func(event Event) error) error {
+func (p *nlBpfProtector) rcvEvent(ctx context.Context, callback func(event Event) error) error {
 	log := logger.FromContext(ctx)
 	rd, err := ringbuf.NewReader(p.objs.Events)
 	if err != nil {

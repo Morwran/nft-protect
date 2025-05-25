@@ -12,7 +12,8 @@ import (
 type protectConstrutor func(pid uint32, protectedTblName string) (nft_protector.Protector, error)
 
 var protectConstrutors = map[string]protectConstrutor{
-	"lsm": setupLsmProtector,
+	"lsm":   setupLsmProtector,
+	"nlbpf": setupNlBpfProtector,
 }
 
 func SetupProtector() (nft_protector.Protector, error) {
@@ -25,4 +26,8 @@ func SetupProtector() (nft_protector.Protector, error) {
 
 func setupLsmProtector(pid uint32, protectedTblName string) (nft_protector.Protector, error) {
 	return nft_protector.NewLsmEbpfProtector(pid, protectedTblName)
+}
+
+func setupNlBpfProtector(pid uint32, protectedTblName string) (nft_protector.Protector, error) {
+	return nft_protector.NewNlBpfProtector(pid, protectedTblName)
 }
